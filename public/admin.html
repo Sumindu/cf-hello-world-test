@@ -27,13 +27,9 @@
 <body>
 <main>
   <h1>Send push notification</h1>
-  <p class="hint">Admin secret is only used for this request and is never stored.</p>
+  <p class="hint">No login required yet — basic auth is coming later.</p>
 
   <form id="notify-form">
-    <div>
-      <label for="secret">Admin secret</label>
-      <input type="password" id="secret" name="secret" required autocomplete="off">
-    </div>
     <div>
       <label for="group">Group</label>
       <input type="text" id="group" name="group" value="all" required>
@@ -57,7 +53,6 @@
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const secret = document.getElementById("secret").value;
     const group = document.getElementById("group").value;
     const title = document.getElementById("title").value;
     const body = document.getElementById("body").value;
@@ -72,7 +67,6 @@
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Admin-Secret": secret,
         },
         body: JSON.stringify({ group, title, body }),
       });

@@ -19,22 +19,14 @@ describe("POST /admin/notify", () => {
     });
   });
 
-  it("rejects requests without the admin secret", async () => {
-    const response = await exports.default.fetch("https://example.com/admin/notify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ group: "notify-group", title: "Hi", body: "Hello" }),
-    });
-    expect(response.status).toBe(401);
-  });
+  // Auth is intentionally disabled for now (see src/routes/push.ts) — will
+  // be re-added once basic auth + RBAC lands, at which point an
+  // "unauthenticated request is rejected" test belongs here again.
 
   it("sends only to subscriptions in the requested group", async () => {
     const response = await exports.default.fetch("https://example.com/admin/notify", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Admin-Secret": env.ADMIN_NOTIFY_SECRET,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ group: "notify-group", title: "Hi", body: "Hello" }),
     });
     expect(response.status).toBe(200);
@@ -55,13 +47,10 @@ describe("POST /admin/notify", () => {
     );
   });
 
-  it("rejects malformed JSON with valid admin secret", async () => {
+  it("rejects malformed JSON", async () => {
     const response = await exports.default.fetch("https://example.com/admin/notify", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Admin-Secret": env.ADMIN_NOTIFY_SECRET,
-      },
+      headers: { "Content-Type": "application/json" },
       body: "not valid json{",
     });
     expect(response.status).toBe(400);
