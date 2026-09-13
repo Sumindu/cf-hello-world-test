@@ -5,7 +5,7 @@ Date: 2026-09-13
 ## Purpose
 
 A small end-to-end test project proving out a full Cloudflare stack (Workers,
-D1, R2, custom domain, GitHub Actions CI/CD) through one deployed page:
+D1, Workers KV, custom domain, GitHub Actions CI/CD) through one deployed page:
 `https://hello.sumindu.me`. Secondary goal: demonstrate PWA installability and
 targeted Web Push notifications. The project must feel like a real, polished
 page rather than a bare test harness, and must be lightweight enough to be
@@ -30,7 +30,13 @@ smooth on low-bandwidth connections.
   code structure with no low-bandwidth tradeoff.
 - **Database**: D1 native binding (`env.DB.prepare(...).bind(...)`), no
   ORM.
-- **Storage**: R2 native binding, no additional library.
+- **Storage**: Workers KV native binding, no additional library. (Originally
+  planned as R2; switched because R2 requires a payment method on file even
+  for free-tier usage, which the user opted not to provide. KV has no such
+  requirement and offers a similar put/get/list-by-key API, at the cost of
+  eventual consistency — a value written in one Cloudflare location can take
+  up to ~60 seconds to become visible from another edge location. Acceptable
+  for this project's traffic scale.)
 - **Push**: standard [`web-push`](https://www.npmjs.com/package/web-push)
   npm package with the `nodejs_compat` compatibility flag — this is
   Cloudflare's own documented approach (see their
@@ -49,8 +55,8 @@ Browser ──GET /──────────────► Worker ──D1
    │                              │
    │◄── HTML (count inlined) ─────┘
    │
-   ├──POST /upload (image) ─────► Worker ──R2: PUT object
-   ├──GET /image/:key ──────────► Worker ──R2: GET object
+   ├──POST /upload (image) ─────► Worker ──KV: put value+metadata
+   ├──GET /image/:key ──────────► Worker ──KV: get value+metadata
    ├──POST /subscribe ──────────► Worker ──D1: INSERT push_subscriptions
    └──POST /admin/notify ───────► Worker ──D1: SELECT subscriptions WHERE group
                                        └──► Web Push (VAPID) to each endpoint
@@ -77,21 +83,29 @@ CREATE TABLE push_subscriptions (
 CREATE INDEX idx_push_subscriptions_group ON push_subscriptions(group_tag);
 ```
 
-### R2
+### Workers KV (images)
 
-- Bucket stores uploaded images keyed by a content hash or timestamp-based
-  key (e.g. `img/<uuid>.<ext>`) to avoid collisions and enable long-lived
-  cache headers (`Cache-Control: public, max-age=31536000, immutable`).
+- KV namespace stores uploaded images keyed by a random key (e.g.
+  `img/<uuid>.<ext>`) to avoid collisions; content type is stored as KV
+  metadata alongside the value (`put(key, value, { metadata: { contentType } })`)
+  and read back via `getWithMetadata`. Responses set long-lived cache
+  headers (`Cache-Control: public, max-age=31536000, immutable`) manually
+  in the Worker, since KV doesn't attach HTTP metadata to responses the way
+  R2 does.
 - Worker enforces a max upload size (e.g. 2 MB) server-side regardless of
   client-side compression, since the client cannot be trusted.
+- Known tradeoff: KV is eventually consistent, so a just-uploaded image may
+  not immediately appear in the gallery if the next request lands on a
+  different Cloudflare edge location. Not expected to be noticeable at this
+  project's traffic scale.
 
 ### Routes
 
 | Method | Path             | Behavior |
 |--------|------------------|----------|
 | GET    | `/`              | Renders the page. Inserts a `visits` row, reads `COUNT(*)`, inlines the count directly into the HTML (no extra client round trip for critical content). Lists recent uploaded image keys for the gallery. |
-| POST   | `/upload`        | Accepts multipart/form-data image, validates type/size, stores in R2, returns the new key/URL. |
-| GET    | `/image/:key`    | Streams the object from R2 with long-lived cache headers. 404 if missing. |
+| POST   | `/upload`        | Accepts multipart/form-data image, validates type/size, stores in KV, returns the new key/URL. |
+| GET    | `/image/:key`    | Returns the value from KV with long-lived cache headers. 404 if missing. |
 | POST   | `/subscribe`     | Accepts a PushSubscription JSON + optional `group` field, upserts into `push_subscriptions`. |
 | POST   | `/admin/notify`  | Requires header `X-Admin-Secret` matching the `ADMIN_NOTIFY_SECRET` Worker secret. Body `{group, title, body}`. Looks up matching subscriptions and sends Web Push to each. |
 | GET    | `/manifest.json` | PWA manifest. |
@@ -149,7 +163,7 @@ CREATE INDEX idx_push_subscriptions_group ON push_subscriptions(group_tag);
 
 ## Infra / deployment
 
-- `wrangler.jsonc`: D1 binding (`DB`), R2 binding (`BUCKET`), custom domain
+- `wrangler.jsonc`: D1 binding (`DB`), KV binding (`IMAGES_KV`), custom domain
   route `hello.sumindu.me/*`, `compatibility_date` set to today,
   `compatibility_flags: ["nodejs_compat"]` (required by `web-push`).
 - Secrets (`ADMIN_NOTIFY_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`)
