@@ -1,0 +1,11 @@
+{
+  "name": "Cloudflare Hello World Test",
+  "short_name": "CF Hello",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0b0c",
+  "theme_color": "#0b5fff",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
