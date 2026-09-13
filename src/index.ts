@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { homeRoute } from "./routes/home";
 
 export type Env = {
   DB: D1Database;
@@ -12,5 +13,6 @@ export type Env = {
 const app = new Hono<{ Bindings: Env }>();
 
 app.get("/health", (c) => c.text("OK"));
+app.get("/", homeRoute);
 
 export default app;
