@@ -1590,13 +1590,24 @@ Run: `npm run migrate:remote`
 
 Run: `npx --yes web-push generate-vapid-keys`
 
+- [ ] **Step 6b: Remove the dev-only vars from `wrangler.jsonc` and relocate them**
+
+Cloudflare does not allow a `secret` and a `var` to share a binding name — `wrangler deploy` pushes the `vars` block in a way that conflicts with (and can overwrite) an existing same-named secret. So before setting real secrets, the `vars` block Task 7 added to `wrangler.jsonc` (`ADMIN_NOTIFY_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`) must be removed entirely and relocated:
+
+1. Delete the whole `vars: { ... }` block from `wrangler.jsonc`.
+2. Add the same three keys (same dev-only placeholder string values Task 7 used) to `vitest.config.ts`'s `cloudflareTest({ miniflare: { bindings: { ... } } })` — the same mechanism already used for `TEST_MIGRATIONS` in Task 2 — so `npm test` keeps working unchanged.
+3. Add `ADMIN_NOTIFY_SECRET="dev-only-admin-secret"` to the project's `.dev.vars` file (already containing the real local VAPID keypair from Task 9) so `wrangler dev`/local smoke testing keeps working unchanged — this matches the exact value Task 10's smoke test already used.
+4. Run `npm test` to confirm all tests still pass with the relocated bindings.
+
+No application code changes are needed — routes already read `c.env.ADMIN_NOTIFY_SECRET` etc. regardless of where the value comes from.
+
 - [ ] **Step 7: Set production secrets** (each prompts for a value; do not put these in `wrangler.jsonc`)
 
 Run: `npx wrangler secret put ADMIN_NOTIFY_SECRET` — enter a newly generated random string (e.g. from `openssl rand -hex 32`).
 Run: `npx wrangler secret put VAPID_PUBLIC_KEY` — enter the public key from Step 6.
 Run: `npx wrangler secret put VAPID_PRIVATE_KEY` — enter the private key from Step 6.
 
-Note: Worker secrets take precedence over the same-named keys in `wrangler.jsonc`'s `vars` block, so the `dev-only-*` values from Task 7/9 remain safe for local/test use and are not used in production.
+Note: these secret names no longer appear anywhere in the committed `wrangler.jsonc` after Step 6b, so there is no collision — `wrangler deploy` in Step 8 will not overwrite them.
 
 - [ ] **Step 8: Deploy**
 
@@ -1609,11 +1620,25 @@ Expected: `200`
 Run: `curl -s https://hello.sumindu.me/ | grep -o 'viewed <span class="count">[0-9]*</span> times'`
 Expected: a line showing a count of 1 or more.
 
-- [ ] **Step 10: Commit the `wrangler.jsonc` changes (database ID and route only — never commit secrets)**
+- [ ] **Step 10: Commit the `wrangler.jsonc` changes (database ID, KV id, and route only — never commit secrets)**
 
 ```bash
 git add wrangler.jsonc
-git commit -m "Point wrangler.jsonc at provisioned D1 database and hello.sumindu.me route
+git commit -m "Point wrangler.jsonc at provisioned D1 database, KV namespace, and hello.sumindu.me route
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 10b: Commit the Step 6b vars relocation separately (`wrangler.jsonc`, `vitest.config.ts`; `.dev.vars` stays untracked)**
+
+```bash
+git add wrangler.jsonc vitest.config.ts
+git commit -m "Move dev-only secret placeholders out of deployed wrangler.jsonc
+
+Cloudflare rejects a secret and a var sharing a binding name, and
+wrangler deploy was clobbering the just-set production secrets with
+these placeholders. Relocated to vitest.config.ts miniflare bindings
+(for npm test) and .dev.vars (for wrangler dev, already git-ignored).
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ```

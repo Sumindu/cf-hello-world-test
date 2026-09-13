@@ -167,9 +167,15 @@ CREATE INDEX idx_push_subscriptions_group ON push_subscriptions(group_tag);
   route `hello.sumindu.me/*`, `compatibility_date` set to today,
   `compatibility_flags: ["nodejs_compat"]` (required by `web-push`).
 - Secrets (`ADMIN_NOTIFY_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`)
-  set via `wrangler secret put`, and mirrored as GitHub Actions secrets for
-  CI use where needed (VAPID public key can be a plain build-time constant
-  since it is not sensitive).
+  set via `wrangler secret put`. These names must NOT also appear in
+  `wrangler.jsonc`'s `vars` block — Cloudflare does not let a `secret` and a
+  `var` share a binding name, and `wrangler deploy` pushes `vars` in a way
+  that conflicts with an existing same-named secret (confirmed during
+  execution; an earlier draft of this spec incorrectly assumed secrets take
+  precedence). Local/test values for these three names live instead in
+  `.dev.vars` (for `wrangler dev`, git-ignored) and in `vitest.config.ts`'s
+  `miniflare.bindings` (for the automated test suite) — never in the
+  committed `wrangler.jsonc`.
 - GitHub repo `cf-hello-world-test` (public), created via `gh repo create`.
 - GitHub Actions workflow (`.github/workflows/deploy.yml`): on push to
   `main` — checkout, setup Node, `npm ci`, run D1 migrations against the
