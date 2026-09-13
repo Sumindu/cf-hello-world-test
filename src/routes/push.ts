@@ -35,7 +35,12 @@ export async function subscribeRoute(c: Context<{ Bindings: Env }>) {
 type NotifyBody = { group?: string; title: string; body: string };
 
 export async function notifyRoute(c: Context<{ Bindings: Env }>) {
-  if (c.req.header("X-Admin-Secret") !== c.env.ADMIN_NOTIFY_SECRET) {
+  // An unbound secret must fail closed: without the first check, a missing
+  // header would compare undefined !== undefined and be treated as authorized.
+  if (
+    !c.env.ADMIN_NOTIFY_SECRET ||
+    c.req.header("X-Admin-Secret") !== c.env.ADMIN_NOTIFY_SECRET
+  ) {
     return c.json({ error: "unauthorized" }, 401);
   }
 

@@ -1,8 +1,17 @@
+export function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function renderHomePage(opts: { visitCount: number; imageKeys: string[] }): string {
   const gallery = opts.imageKeys
     .map(
       (key) =>
-        `<img src="/image/${key}" alt="Uploaded photo" loading="lazy" width="160" height="160" class="thumb">`
+        `<img src="/image/${escapeHtml(key)}" alt="Uploaded photo" loading="lazy" width="160" height="160" class="thumb">`
     )
     .join("");
 
