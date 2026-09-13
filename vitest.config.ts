@@ -11,7 +11,12 @@ export default defineConfig(async () => {
       cloudflareTest({
         wrangler: { configPath: "./wrangler.jsonc" },
         miniflare: {
-          bindings: { TEST_MIGRATIONS: migrations },
+          bindings: {
+            TEST_MIGRATIONS: migrations,
+            ADMIN_NOTIFY_SECRET: "dev-only-admin-secret",
+            VAPID_PUBLIC_KEY: "dev-only-public-key",
+            VAPID_PRIVATE_KEY: "dev-only-private-key",
+          },
         },
       }),
     ],

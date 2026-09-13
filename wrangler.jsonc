@@ -23,10 +23,5 @@
   ],
   "routes": [
     { "pattern": "hello.sumindu.me", "custom_domain": true }
-  ],
-  "vars": {
-    "ADMIN_NOTIFY_SECRET": "dev-only-admin-secret",
-    "VAPID_PUBLIC_KEY": "dev-only-public-key",
-    "VAPID_PRIVATE_KEY": "dev-only-private-key"
-  }
+  ]
 }
