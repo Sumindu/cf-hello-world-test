@@ -1,6 +1,7 @@
 import { env, exports } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { addSubscription } from "../../src/lib/db";
+import webpush from "web-push";
 
 describe("POST /admin/notify", () => {
   beforeEach(async () => {
@@ -40,6 +41,18 @@ describe("POST /admin/notify", () => {
     const { sent, total } = await response.json<{ sent: number; total: number }>();
     expect(total).toBe(1);
     expect(sent).toBe(1);
+
+    // Verify the correct endpoint was called
+    const mocked = vi.mocked(webpush.sendNotification);
+    expect(mocked).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: "https://push.example.com/notify-a" }),
+      expect.anything()
+    );
+    // Verify the other group's endpoint was NOT called
+    expect(mocked).not.toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: "https://push.example.com/notify-b" }),
+      expect.anything()
+    );
   });
 
   it("rejects malformed JSON with valid admin secret", async () => {
