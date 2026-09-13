@@ -20,5 +20,10 @@
       "binding": "BUCKET",
       "bucket_name": "cf-hello-world-test-images"
     }
-  ]
+  ],
+  "vars": {
+    "ADMIN_NOTIFY_SECRET": "dev-only-admin-secret",
+    "VAPID_PUBLIC_KEY": "dev-only-public-key",
+    "VAPID_PRIVATE_KEY": "dev-only-private-key"
+  }
 }

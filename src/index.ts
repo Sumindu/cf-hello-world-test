@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { homeRoute } from "./routes/home";
+import { subscribeRoute, vapidPublicKeyRoute } from "./routes/push";
 import { imageRoute, uploadRoute } from "./routes/upload";
 
 export type Env = {
@@ -17,5 +18,7 @@ app.get("/health", (c) => c.text("OK"));
 app.get("/", homeRoute);
 app.post("/upload", uploadRoute);
 app.get("/image/*", imageRoute);
+app.get("/vapid-public-key", vapidPublicKeyRoute);
+app.post("/subscribe", subscribeRoute);
 
 export default app;
