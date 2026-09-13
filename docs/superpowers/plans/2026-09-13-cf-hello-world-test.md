@@ -1269,6 +1269,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 **Files:**
 - Create: `public/sw.js`
 - Modify: `public/client.js`
+- Create (untracked, git-ignored, not committed): `.dev.vars`
 
 **Interfaces:**
 - Consumes: `#subscribe-btn`, `#group-select`, `#notif-status` DOM ids from `src/lib/render.ts` (Task 3); `GET /vapid-public-key` and `POST /subscribe` from Task 7.
@@ -1381,7 +1382,14 @@ subscribeBtn.addEventListener("click", async () => {
 - [ ] **Step 3: Generate a real VAPID keypair for local testing**
 
 Run: `npx --yes web-push generate-vapid-keys`
-Copy the printed public/private keys and temporarily replace `dev-only-public-key` / `dev-only-private-key` in `wrangler.jsonc`'s `vars` block with these real values (needed because browsers validate the VAPID key format when subscribing — the placeholder strings from Task 7 aren't valid keys).
+Copy the printed public/private keys into a new `.dev.vars` file at the project root (this file is already listed in `.gitignore` from Task 1, so a real keypair never enters git history):
+
+```
+VAPID_PUBLIC_KEY="<paste the public key here>"
+VAPID_PRIVATE_KEY="<paste the private key here>"
+```
+
+Wrangler automatically loads `.dev.vars` for `wrangler dev` and overrides the matching `vars` entries from `wrangler.jsonc` (the `dev-only-*` placeholders stay in `wrangler.jsonc` unchanged, and vitest's test runs are unaffected since `.dev.vars` is only read by `wrangler dev`). This is needed because browsers validate the VAPID key format when subscribing — the placeholder strings from Task 7 aren't valid keys.
 
 - [ ] **Step 4: Manually test in a browser**
 
@@ -1391,7 +1399,7 @@ Open `http://localhost:8787/` in Chrome or Edge. Click "Enable notifications", a
 - [ ] **Step 5: Commit**
 
 ```bash
-git add public/sw.js public/client.js wrangler.jsonc
+git add public/sw.js public/client.js
 git commit -m "Add service worker (shell caching, push handling) and subscribe UI
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
