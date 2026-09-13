@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — Send Notification</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#111; --accent:#0b5fff; --border:#ddd; --error:#c0392b; --ok:#1a7f37; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0b0b0c; --fg:#eee; --border:#333; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px 16px; background:var(--bg); color:var(--fg); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height:1.5; }
+  main { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  p.hint { font-size: .85rem; opacity: .75; margin-top: 0; }
+  form { display:flex; flex-direction:column; gap:12px; margin-top:20px; }
+  label { font-size: .9rem; font-weight: 600; }
+  input, textarea { width:100%; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--fg); font:inherit; }
+  textarea { resize: vertical; min-height: 80px; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:10px 16px; font-size:1rem; cursor:pointer; align-self:flex-start; }
+  button:disabled { opacity:.6; cursor:default; }
+  #status { margin-top:16px; font-size:.9rem; white-space:pre-wrap; }
+  #status.ok { color:var(--ok); }
+  #status.error { color:var(--error); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Send push notification</h1>
+  <p class="hint">Admin secret is only used for this request and is never stored.</p>
+
+  <form id="notify-form">
+    <div>
+      <label for="secret">Admin secret</label>
+      <input type="password" id="secret" name="secret" required autocomplete="off">
+    </div>
+    <div>
+      <label for="group">Group</label>
+      <input type="text" id="group" name="group" value="all" required>
+    </div>
+    <div>
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" required>
+    </div>
+    <div>
+      <label for="body">Body</label>
+      <textarea id="body" name="body" required></textarea>
+    </div>
+    <button type="submit">Send</button>
+  </form>
+
+  <p id="status"></p>
+</main>
+<script>
+  const form = document.getElementById("notify-form");
+  const status = document.getElementById("status");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const secret = document.getElementById("secret").value;
+    const group = document.getElementById("group").value;
+    const title = document.getElementById("title").value;
+    const body = document.getElementById("body").value;
+
+    const button = form.querySelector("button");
+    button.disabled = true;
+    status.className = "";
+    status.textContent = "Sending...";
+
+    try {
+      const response = await fetch("/admin/notify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Secret": secret,
+        },
+        body: JSON.stringify({ group, title, body }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        status.className = "error";
+        status.textContent = `Error (${response.status}): ${data.error || "unknown error"}`;
+      } else {
+        status.className = "ok";
+        status.textContent = `Sent to ${data.sent} of ${data.total} subscriber(s) in group "${group}".`;
+      }
+    } catch (err) {
+      status.className = "error";
+      status.textContent = "Network error — could not reach the server.";
+    } finally {
+      button.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
