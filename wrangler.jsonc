@@ -12,14 +12,17 @@
     {
       "binding": "DB",
       "database_name": "cf-hello-world-test-db",
-      "database_id": "00000000-0000-0000-0000-000000000001"
+      "database_id": "44843d03-3357-43c0-8234-eb2ed7cd714e"
     }
   ],
   "kv_namespaces": [
     {
       "binding": "IMAGES_KV",
-      "id": "00000000000000000000000000000000"
+      "id": "900b57f34ec744eba75c9dbcb9139836"
     }
+  ],
+  "routes": [
+    { "pattern": "hello.sumindu.me", "custom_domain": true }
   ],
   "vars": {
     "ADMIN_NOTIFY_SECRET": "dev-only-admin-secret",
