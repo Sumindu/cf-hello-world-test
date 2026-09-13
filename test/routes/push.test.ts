@@ -32,4 +32,13 @@ describe("POST /subscribe", () => {
     });
     expect(response.status).toBe(400);
   });
+
+  it("rejects malformed JSON", async () => {
+    const response = await exports.default.fetch("https://example.com/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "not valid json{",
+    });
+    expect(response.status).toBe(400);
+  });
 });

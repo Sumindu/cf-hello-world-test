@@ -13,7 +13,12 @@ type SubscribeBody = {
 };
 
 export async function subscribeRoute(c: Context<{ Bindings: Env }>) {
-  const body = await c.req.json<SubscribeBody>();
+  let body: SubscribeBody;
+  try {
+    body = await c.req.json<SubscribeBody>();
+  } catch {
+    return c.json({ error: "invalid JSON" }, 400);
+  }
   if (!body.endpoint || !body.keys?.p256dh || !body.keys?.auth) {
     return c.json({ error: "invalid subscription" }, 400);
   }
