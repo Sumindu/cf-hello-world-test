@@ -42,7 +42,7 @@ describe("POST /upload and GET /image/*", () => {
     expect(response.status).toBe(415);
   });
 
-  it("generates time-sortable keys so the gallery can show recent uploads", async () => {
+  it("generates keys whose ascending lexicographic order is newest-first, so KV list() pages the gallery without a client-side sort", async () => {
     async function upload(): Promise<string> {
       const body = new FormData();
       body.append("image", makeImageFile());
@@ -58,18 +58,23 @@ describe("POST /upload and GET /image/*", () => {
     await new Promise((resolve) => setTimeout(resolve, 5));
     const second = await upload();
 
-    // img/<13-digit ms timestamp>-<uuid>.<ext>
+    // img/<13-digit descending timestamp ordinal>-<uuid>.<ext>
     const pattern = /^img\/(\d{13})-[0-9a-f-]{36}\.png$/;
     const firstMatch = first.match(pattern);
     const secondMatch = second.match(pattern);
     expect(firstMatch).not.toBeNull();
     expect(secondMatch).not.toBeNull();
 
-    const firstTs = Number(firstMatch![1]);
-    const secondTs = Number(secondMatch![1]);
-    // Timestamps are real and non-decreasing, so lexicographic sort is chronological.
-    expect(Math.abs(Date.now() - firstTs)).toBeLessThan(60_000);
-    expect(secondTs).toBeGreaterThanOrEqual(firstTs);
+    const firstOrdinal = Number(firstMatch![1]);
+    const secondOrdinal = Number(secondMatch![1]);
+    // The ordinal is (9999999999999 - Date.now()), so it's real and
+    // non-increasing across uploads, which is the whole point: ascending
+    // lexicographic/numeric order over these keys is newest-first, matching
+    // what kv.list({ prefix, limit }) naturally returns first.
+    expect(Math.abs(9999999999999 - Date.now() - firstOrdinal)).toBeLessThan(60_000);
+    expect(secondOrdinal).toBeLessThanOrEqual(firstOrdinal);
+    // The second (newer) upload must sort lexicographically before the first.
+    expect(second < first).toBe(true);
   });
 
   it("rejects an image/* type that is not on the allowlist", async () => {

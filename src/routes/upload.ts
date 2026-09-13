@@ -36,9 +36,15 @@ export async function uploadRoute(c: Context<{ Bindings: Env }>) {
 
   const ext = ALLOWED_IMAGE_TYPES[file.type];
   const contentType = CANONICAL_TYPE_BY_EXT[ext];
-  // Millisecond timestamp first so keys sort chronologically as strings; the
+  // Descending ("inverted") millisecond timestamp first, so that ascending
+  // lexicographic order over these keys is newest-first. KV's list() with a
+  // limit returns the first N keys in ascending lexicographic order, so this
+  // lets the gallery page the newest images directly without listing the
+  // whole namespace. 9999999999999 is safely past any realistic Date.now()
+  // for centuries, keeping the subtraction a positive 13-digit number; the
   // UUID keeps keys unique within the same millisecond.
-  const key = `img/${Date.now().toString().padStart(13, "0")}-${crypto.randomUUID()}.${ext}`;
+  const timestampOrdinal = (9999999999999 - Date.now()).toString().padStart(13, "0");
+  const key = `img/${timestampOrdinal}-${crypto.randomUUID()}.${ext}`;
   await putImage(c.env.IMAGES_KV, key, await file.arrayBuffer(), contentType);
 
   return c.json({ key, url: `/image/${key}` });

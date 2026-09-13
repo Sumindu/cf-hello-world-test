@@ -18,6 +18,10 @@ export async function getImage(kv: KVNamespace, key: string): Promise<StoredImag
 }
 
 export async function listImageKeys(kv: KVNamespace, limit = 12): Promise<string[]> {
+  // Upload keys use a descending timestamp ordinal (see src/routes/upload.ts),
+  // so ascending lexicographic order - what kv.list() with a limit returns -
+  // is already newest-first. No client-side sort is needed or wanted: sorting
+  // an already-truncated page can't recover keys that were never fetched.
   const listed = await kv.list({ prefix: "img/", limit });
-  return listed.keys.map((k) => k.name).sort().reverse();
+  return listed.keys.map((k) => k.name);
 }
