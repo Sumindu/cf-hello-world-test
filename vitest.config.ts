@@ -16,7 +16,7 @@ export default defineConfig(async () => {
       }),
     ],
     test: {
-      setupFiles: ["./test/apply-migrations.ts"],
+      setupFiles: ["./test/setup-web-push.ts", "./test/apply-migrations.ts"],
     },
   };
 });
