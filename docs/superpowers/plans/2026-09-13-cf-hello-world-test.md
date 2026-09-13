@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Deploy a small, highly-optimized Cloudflare Worker demo at `https://hello.sumindu.me` exercising D1 (SQL), R2 (blob storage), a PWA shell, and targeted Web Push notifications, with a public GitHub repo and a GitHub Actions CI/CD pipeline.
+**Goal:** Deploy a small, highly-optimized Cloudflare Worker demo at `https://hello.sumindu.me` exercising D1 (SQL), Workers KV (blob storage), a PWA shell, and targeted Web Push notifications, with a public GitHub repo and a GitHub Actions CI/CD pipeline.
 
-**Architecture:** A single Cloudflare Worker built with Hono handles dynamic routes (`/`, `/upload`, `/image/*`, `/subscribe`, `/admin/notify`, `/vapid-public-key`); Cloudflare Workers Assets serves static files (`manifest.json`, `sw.js`, `client.js`, icon) directly. D1 stores visit counts and push subscriptions; R2 stores uploaded images. The page is server-rendered vanilla HTML/CSS with no client framework or bundler, to stay light on low-bandwidth connections.
+**Architecture:** A single Cloudflare Worker built with Hono handles dynamic routes (`/`, `/upload`, `/image/*`, `/subscribe`, `/admin/notify`, `/vapid-public-key`); Cloudflare Workers Assets serves static files (`manifest.json`, `sw.js`, `client.js`, icon) directly. D1 stores visit counts and push subscriptions; Workers KV stores uploaded images (originally planned as R2; switched mid-execution because R2 requires a payment method on file even for free-tier use, which the user opted not to provide — see the migration task below and the updated spec). The page is server-rendered vanilla HTML/CSS with no client framework or bundler, to stay light on low-bandwidth connections.
 
-**Tech Stack:** TypeScript, Hono, Cloudflare Workers (D1 + R2 + Assets bindings), `web-push` npm package with the `nodejs_compat` compatibility flag, `@cloudflare/vitest-plugin` for testing, Wrangler CLI, GitHub Actions.
+**Tech Stack:** TypeScript, Hono, Cloudflare Workers (D1 + KV + Assets bindings), `web-push` npm package with the `nodejs_compat` compatibility flag, `@cloudflare/vitest-plugin` for testing, Wrangler CLI, GitHub Actions.
 
 **Spec:** `docs/superpowers/specs/2026-09-13-cf-hello-world-test-design.md`
 
@@ -1445,6 +1445,113 @@ No commit for this task unless fixes were needed (in which case, commit the fix 
 
 ---
 
+## Task 10b: Migrate image storage from R2 to Workers KV
+
+**Context:** Task 11 discovered that R2 requires a payment method on file even for free-tier usage. The user opted not to provide one, so image storage moves to Workers KV instead — see the updated spec (`docs/superpowers/specs/2026-09-13-cf-hello-world-test-design.md`) for the full rationale and the KV tradeoffs (eventual consistency). This task ports the R2-based code from Tasks 4/5 to KV without changing any route behavior or response shapes.
+
+**Files:**
+- Modify: `wrangler.jsonc` (remove `r2_buckets`, add `kv_namespaces`)
+- Modify: `src/index.ts` (Env type: `BUCKET: R2Bucket` → `IMAGES_KV: KVNamespace`)
+- Modify: `src/lib/storage.ts` (rewrite against the KV API)
+- Modify: `src/routes/upload.ts` (use `c.env.IMAGES_KV` instead of `c.env.BUCKET`)
+- Modify: `src/routes/home.ts` (use `c.env.IMAGES_KV` instead of `c.env.BUCKET`)
+- Modify: `test/routes/upload.test.ts`, `test/routes/home.test.ts` (no assertion changes needed — same response shapes — but the local KV binding needs a dummy id in `wrangler.jsonc` for Miniflare to simulate it)
+
+**Interfaces:** Unchanged from Tasks 4/5 — `putImage`, `getImage`, `listImageKeys` keep the same names and call sites in `upload.ts`/`home.ts`; only their internal implementation and first-parameter type change.
+
+- [ ] **Step 1: Update `wrangler.jsonc`** — replace the `r2_buckets` block with:
+
+```jsonc
+  "kv_namespaces": [
+    {
+      "binding": "IMAGES_KV",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+```
+
+(32-character dummy id — Miniflare simulates KV locally regardless of the value; Task 11 replaces it with the real namespace id after creation.)
+
+- [ ] **Step 2: Update the `Env` type in `src/index.ts`** — replace `BUCKET: R2Bucket;` with `IMAGES_KV: KVNamespace;`. Do not change any other line in this file.
+
+- [ ] **Step 3: Rewrite `src/lib/storage.ts`**
+
+```ts
+export async function putImage(
+  kv: KVNamespace,
+  key: string,
+  data: ArrayBuffer,
+  contentType: string
+): Promise<void> {
+  await kv.put(key, data, {
+    metadata: { contentType },
+  });
+}
+
+export type StoredImage = { body: ArrayBuffer; contentType: string } | null;
+
+export async function getImage(kv: KVNamespace, key: string): Promise<StoredImage> {
+  const result = await kv.getWithMetadata<{ contentType: string }>(key, "arrayBuffer");
+  if (result.value === null) return null;
+  return { body: result.value, contentType: result.metadata?.contentType ?? "application/octet-stream" };
+}
+
+export async function listImageKeys(kv: KVNamespace, limit = 12): Promise<string[]> {
+  const listed = await kv.list({ prefix: "img/", limit });
+  return listed.keys.map((k) => k.name).sort().reverse();
+}
+```
+
+- [ ] **Step 4: Update `src/routes/upload.ts`** — two call-site changes only:
+
+Replace:
+```ts
+  await putImage(c.env.BUCKET, key, await file.arrayBuffer(), file.type);
+```
+with:
+```ts
+  await putImage(c.env.IMAGES_KV, key, await file.arrayBuffer(), file.type);
+```
+
+Replace the whole `imageRoute` function with:
+```ts
+export async function imageRoute(c: Context<{ Bindings: Env }>) {
+  const key = c.req.path.replace(/^\/image\//, "");
+  const image = await getImage(c.env.IMAGES_KV, key);
+  if (!image) {
+    return c.notFound();
+  }
+  return new Response(image.body, {
+    headers: {
+      "Content-Type": image.contentType,
+      "Cache-Control": "public, max-age=31536000, immutable",
+    },
+  });
+}
+```
+
+- [ ] **Step 5: Update `src/routes/home.ts`** — replace `await listImageKeys(c.env.BUCKET);` with `await listImageKeys(c.env.IMAGES_KV);`. No other change.
+
+- [ ] **Step 6: Run the full test suite**
+
+Run: `npm test`
+Expected: PASS — `test/routes/upload.test.ts` and `test/routes/home.test.ts` exercise the same routes and assert the same response shapes; only the underlying storage binding changed, so no test file edits should be needed. If a test fails, read the failure before changing test assertions — the response shapes (`{key, url}` on upload, `Content-Type`/`Cache-Control` headers on retrieval, `src="..."` in the gallery HTML) must stay identical to what Tasks 4/5 already established and had reviewed.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add wrangler.jsonc src/index.ts src/lib/storage.ts src/routes/upload.ts src/routes/home.ts
+git commit -m "Migrate image storage from R2 to Workers KV
+
+R2 requires a payment method on file even for free-tier usage; the
+user opted not to provide one. Workers KV has no such requirement.
+Response shapes and route behavior are unchanged.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+---
+
 ## Task 11: Provision Cloudflare resources and deploy
 
 **Files:**
@@ -1455,13 +1562,15 @@ No commit for this task unless fixes were needed (in which case, commit the fix 
 Run: `npx wrangler d1 create cf-hello-world-test-db`
 Copy the `database_id` from the output.
 
-- [ ] **Step 2: Create the R2 bucket**
+- [ ] **Step 2: Create the Workers KV namespace**
 
-Run: `npx wrangler r2 bucket create cf-hello-world-test-images`
+Run: `npx wrangler kv namespace create IMAGES_KV`
+Copy the `id` from the output.
 
-- [ ] **Step 3: Update `wrangler.jsonc` with the real D1 database ID**
+- [ ] **Step 3: Update `wrangler.jsonc` with the real D1 database ID and KV namespace ID**
 
 Replace `"database_id": "00000000-0000-0000-0000-000000000001"` with the ID from Step 1.
+Replace `"id": "00000000000000000000000000000000"` under `kv_namespaces` with the ID from Step 2.
 
 - [ ] **Step 4: Add the custom domain route**
 
@@ -1627,7 +1736,7 @@ curl -s -X POST https://hello.sumindu.me/upload \
   -F "image=@public/icons/icon.svg;type=image/svg+xml"
 ```
 
-Note: the route currently validates `content-type` starts with `image/`, which `image/svg+xml` satisfies. Expect a JSON response with a `url` field. Then:
+Note: the route currently validates `content-type` starts with `image/`, which `image/svg+xml` satisfies. Expect a JSON response with a `url` field. Note also: image storage is Workers KV, which is eventually consistent — if the immediate GET below returns 404, wait a few seconds and retry once before treating it as a real failure. Then:
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" "https://hello.sumindu.me$(curl -s -X POST https://hello.sumindu.me/upload -F 'image=@public/icons/icon.svg;type=image/svg+xml' | grep -o '"url":"[^"]*"' | cut -d'"' -f4)"
