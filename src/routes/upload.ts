@@ -20,20 +20,20 @@ export async function uploadRoute(c: Context<{ Bindings: Env }>) {
 
   const ext = file.type.split("/")[1] || "bin";
   const key = `img/${crypto.randomUUID()}.${ext}`;
-  await putImage(c.env.BUCKET, key, await file.arrayBuffer(), file.type);
+  await putImage(c.env.IMAGES_KV, key, await file.arrayBuffer(), file.type);
 
   return c.json({ key, url: `/image/${key}` });
 }
 
 export async function imageRoute(c: Context<{ Bindings: Env }>) {
   const key = c.req.path.replace(/^\/image\//, "");
-  const object = await getImage(c.env.BUCKET, key);
-  if (!object) {
+  const image = await getImage(c.env.IMAGES_KV, key);
+  if (!image) {
     return c.notFound();
   }
-  return new Response(object.body, {
+  return new Response(image.body, {
     headers: {
-      "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+      "Content-Type": image.contentType,
       "Cache-Control": "public, max-age=31536000, immutable",
     },
   });

@@ -5,7 +5,7 @@ import { imageRoute, uploadRoute } from "./routes/upload";
 
 export type Env = {
   DB: D1Database;
-  BUCKET: R2Bucket;
+  IMAGES_KV: KVNamespace;
   ASSETS: Fetcher;
   ADMIN_NOTIFY_SECRET: string;
   VAPID_PUBLIC_KEY: string;

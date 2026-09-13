@@ -1,22 +1,23 @@
 export async function putImage(
-  bucket: R2Bucket,
+  kv: KVNamespace,
   key: string,
   data: ArrayBuffer,
   contentType: string
 ): Promise<void> {
-  await bucket.put(key, data, {
-    httpMetadata: {
-      contentType,
-      cacheControl: "public, max-age=31536000, immutable",
-    },
+  await kv.put(key, data, {
+    metadata: { contentType },
   });
 }
 
-export async function getImage(bucket: R2Bucket, key: string) {
-  return bucket.get(key);
+export type StoredImage = { body: ArrayBuffer; contentType: string } | null;
+
+export async function getImage(kv: KVNamespace, key: string): Promise<StoredImage> {
+  const result = await kv.getWithMetadata<{ contentType: string }>(key, "arrayBuffer");
+  if (result.value === null) return null;
+  return { body: result.value, contentType: result.metadata?.contentType ?? "application/octet-stream" };
 }
 
-export async function listImageKeys(bucket: R2Bucket, limit = 12): Promise<string[]> {
-  const listed = await bucket.list({ prefix: "img/", limit });
-  return listed.objects.map((o) => o.key).sort().reverse();
+export async function listImageKeys(kv: KVNamespace, limit = 12): Promise<string[]> {
+  const listed = await kv.list({ prefix: "img/", limit });
+  return listed.keys.map((k) => k.name).sort().reverse();
 }
