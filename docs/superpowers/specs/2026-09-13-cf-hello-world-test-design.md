@@ -19,10 +19,30 @@ smooth on low-bandwidth connections.
   upload — no Cloudflare Images product dependency.
 - No client-side framework or bundler — plain HTML/CSS/JS to keep payload
   minimal and avoid build-tooling overhead for a project this size.
+- No ORM — two tables don't justify one; D1 accessed via raw SQL through
+  its native binding.
+
+## Tech stack
+
+- **Routing/backend**: [Hono](https://hono.dev) (~14KB, Workers-native,
+  used internally by Cloudflare for its own D1/KV dashboards). Runs
+  entirely on the edge, so it costs the browser zero bytes — improves
+  code structure with no low-bandwidth tradeoff.
+- **Database**: D1 native binding (`env.DB.prepare(...).bind(...)`), no
+  ORM.
+- **Storage**: R2 native binding, no additional library.
+- **Push**: standard [`web-push`](https://www.npmjs.com/package/web-push)
+  npm package with the `nodejs_compat` compatibility flag — this is
+  Cloudflare's own documented approach (see their
+  [Agents push-notifications guide](https://developers.cloudflare.com/agents/guides/push-notifications/)),
+  and removes the need for a niche WebCrypto-only package.
+- **Frontend**: vanilla HTML/CSS/JS, server-rendered by Hono — no client
+  framework or bundler.
 
 ## Architecture
 
-Single Cloudflare Worker serving both the HTML page and its API routes.
+Single Cloudflare Worker (Hono app) serving both the HTML page and its
+API routes.
 
 ```
 Browser ──GET /──────────────► Worker ──D1: SELECT/INSERT visits
@@ -93,14 +113,13 @@ CREATE INDEX idx_push_subscriptions_group ON push_subscriptions(group_tag);
 - Subscription POSTed to `/subscribe` with a `group` value (page exposes a
   simple selector, defaulting to `"all"`, so a viewer can join e.g.
   `"testers"`).
-- Sending is done via a Workers-native Web Push implementation (Web Crypto
-  API, RFC 8291 payload encryption) — evaluated during implementation;
-  candidate is an existing edge-compatible npm package. **Fallback**: if no
-  reliable Workers-native package is found and hand-rolling the crypto is
-  too risky for this project's scope, ship broadcast-to-all instead of true
-  per-group targeting, and note the limitation in the README.
-- VAPID keypair generated once and stored as Worker secrets
-  (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`), not committed to the repo.
+- Sending is done via the standard `web-push` npm package (RFC 8291
+  payload encryption handled by the library), enabled by the
+  `nodejs_compat` compatibility flag in `wrangler.jsonc` — per Cloudflare's
+  own documented approach, no fallback needed.
+- VAPID keypair generated once (via `web-push generate-vapid-keys` or
+  equivalent) and stored as Worker secrets (`VAPID_PUBLIC_KEY`,
+  `VAPID_PRIVATE_KEY`), not committed to the repo.
 
 ## Performance / low-bandwidth requirements
 
@@ -131,7 +150,8 @@ CREATE INDEX idx_push_subscriptions_group ON push_subscriptions(group_tag);
 ## Infra / deployment
 
 - `wrangler.jsonc`: D1 binding (`DB`), R2 binding (`BUCKET`), custom domain
-  route `hello.sumindu.me/*`, `compatibility_date` set to today.
+  route `hello.sumindu.me/*`, `compatibility_date` set to today,
+  `compatibility_flags: ["nodejs_compat"]` (required by `web-push`).
 - Secrets (`ADMIN_NOTIFY_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`)
   set via `wrangler secret put`, and mirrored as GitHub Actions secrets for
   CI use where needed (VAPID public key can be a plain build-time constant
@@ -156,6 +176,5 @@ CREATE INDEX idx_push_subscriptions_group ON push_subscriptions(group_tag);
 
 ## Open questions resolved during implementation
 
-- Exact Workers-native Web Push package choice (see fallback above).
 - Icon assets: generated as simple placeholder PNGs unless the user
   supplies branding.
